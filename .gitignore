@@ -1,0 +1,13 @@
+# Generated build output
+build/*.exe
+build/README.md
+dist/
+
+# Visual Studio / editor files
+.vs/
+*.user
+*.suo
+
+# OS files
+Thumbs.db
+.DS_Store
