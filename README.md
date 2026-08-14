@@ -112,6 +112,8 @@ MIT License. See [LICENSE](LICENSE).
 
 NapeBar is an unofficial Windows battery indicator for the Keychron Nape Pro trackball mouse. It reads the battery level over the 2.4GHz receiver and shows it in a CodexBar-style capsule at the top of the screen and in the Windows notification area. Keychron Launcher does not need to stay open.
 
+The status bar can be dragged anywhere inside the physical display, including over the taskbar. Its position is saved and restored after a restart. Left-clicking the tray icon shows it again without activating it, and the tray menu includes a position reset command.
+
 Download `NapeBar-v*-win-x64.zip` from [Releases](https://github.com/takizawa122112-boop/NapeBar/releases), extract it, and run `NapeProBatteryTray.exe`.
 
 The verified path is the 2.4GHz receiver (`Keychron Link-KM`, VID `0x3434`, PID `0xD026`). USB detection support is included, but USB hardware verification is still welcome. The app does not write firmware or change device settings.

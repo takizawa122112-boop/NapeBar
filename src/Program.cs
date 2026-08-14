@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Drawing;
 using System.Drawing.Drawing2D;
+using System.Globalization;
 using System.IO;
 using System.Reflection;
 using System.Text;
@@ -36,6 +37,86 @@ namespace NapeProBatteryTray
         }
 
         internal static string LogPath { get { return FilePath; } }
+    }
+
+    internal static class StatusBarPlacement
+    {
+        internal static Point ClampToBounds(Point desired, Size size, Rectangle bounds)
+        {
+            int width = Math.Max(1, size.Width);
+            int height = Math.Max(1, size.Height);
+            int maxX = Math.Max(bounds.Left, bounds.Right - width);
+            int maxY = Math.Max(bounds.Top, bounds.Bottom - height);
+            int x = Math.Min(Math.Max(desired.X, bounds.Left), maxX);
+            int y = Math.Min(Math.Max(desired.Y, bounds.Top), maxY);
+            return new Point(x, y);
+        }
+    }
+
+    internal static class StatusBarPositionStore
+    {
+        private static readonly string DirectoryPath = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "NapeProBatteryTray");
+        private static readonly string FilePath = Path.Combine(DirectoryPath, "statusbar-position.txt");
+
+        internal static string Serialize(Point location)
+        {
+            return String.Format(CultureInfo.InvariantCulture, "{0},{1}", location.X, location.Y);
+        }
+
+        internal static bool TryParse(string value, out Point location)
+        {
+            location = Point.Empty;
+            if (String.IsNullOrWhiteSpace(value))
+            {
+                return false;
+            }
+
+            string[] parts = value.Trim().Split(',');
+            int x;
+            int y;
+            if (parts.Length != 2 ||
+                !Int32.TryParse(parts[0].Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out x) ||
+                !Int32.TryParse(parts[1].Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out y))
+            {
+                return false;
+            }
+
+            location = new Point(x, y);
+            return true;
+        }
+
+        internal static bool TryLoad(out Point location)
+        {
+            location = Point.Empty;
+            try
+            {
+                if (!File.Exists(FilePath))
+                {
+                    return false;
+                }
+                return TryParse(File.ReadAllText(FilePath), out location);
+            }
+            catch (Exception ex)
+            {
+                AppLog.Write("Failed to load status bar position: " + ex);
+                return false;
+            }
+        }
+
+        internal static void Save(Point location)
+        {
+            try
+            {
+                Directory.CreateDirectory(DirectoryPath);
+                File.WriteAllText(FilePath, Serialize(location));
+            }
+            catch (Exception ex)
+            {
+                AppLog.Write("Failed to save status bar position: " + ex);
+            }
+        }
     }
 
 #if PROBE
@@ -129,11 +210,36 @@ namespace NapeProBatteryTray
                 failures++;
             }
 
+            Rectangle screenBounds = new Rectangle(0, 0, 1440, 1440);
+            Point taskbarPosition = StatusBarPlacement.ClampToBounds(
+                new Point(100, 1400), new Size(190, 38), screenBounds);
+            if (taskbarPosition.X != 100 || taskbarPosition.Y != 1400)
+            {
+                Console.WriteLine("FAIL placement: taskbar area must remain usable");
+                failures++;
+            }
+
+            Point offscreenPosition = StatusBarPlacement.ClampToBounds(
+                new Point(-100, 2000), new Size(190, 38), screenBounds);
+            if (offscreenPosition.X != 0 || offscreenPosition.Y != 1402)
+            {
+                Console.WriteLine("FAIL placement: off-screen position was not clamped");
+                failures++;
+            }
+
+            Point savedPosition;
+            if (!StatusBarPositionStore.TryParse("2853,1397", out savedPosition) ||
+                savedPosition.X != 2853 || savedPosition.Y != 1397)
+            {
+                Console.WriteLine("FAIL position persistence format");
+                failures++;
+            }
+
             if (failures != 0)
             {
                 return 1;
             }
-            Console.WriteLine("PASS protocol packet and candidate priority self-test");
+            Console.WriteLine("PASS protocol, candidate priority, and UI placement self-test");
             return 0;
         }
 
@@ -261,6 +367,9 @@ namespace NapeProBatteryTray
             _statusBarItem = new ToolStripMenuItem("上部ステータスバーを隠す");
             _statusBarItem.Click += delegate { ToggleStatusBar(); };
             menu.Items.Add(_statusBarItem);
+            ToolStripMenuItem resetStatusBarItem = new ToolStripMenuItem("ステータスバーの位置をリセット");
+            resetStatusBarItem.Click += delegate { _statusBar.ResetPosition(); };
+            menu.Items.Add(resetStatusBarItem);
             menu.Items.Add(new ToolStripSeparator());
             _startWithWindowsItem = new ToolStripMenuItem("Windows起動時に自動起動");
             _startWithWindowsItem.Checked = StartupSettings.IsEnabled();
@@ -288,6 +397,13 @@ namespace NapeProBatteryTray
             _timer.Start();
 
             _notifyIcon.DoubleClick += delegate { ShowStatusBar(); };
+            _notifyIcon.MouseClick += delegate(object sender, MouseEventArgs e)
+            {
+                if (e.Button == MouseButtons.Left)
+                {
+                    ShowStatusBar();
+                }
+            };
             RefreshBattery(statusItem);
         }
 
@@ -530,10 +646,13 @@ namespace NapeProBatteryTray
 
     internal sealed class BatteryStatusBarForm : Form
     {
+        private const int DragThreshold = 4;
         private int _battery = -1;
         private string _connection = "--";
+        private bool _dragArmed;
         private bool _dragging;
         private Point _dragOffset;
+        private bool _hasPosition;
 
         internal BatteryStatusBarForm()
         {
@@ -550,39 +669,107 @@ namespace NapeProBatteryTray
             Cursor = Cursors.SizeAll;
             Text = "Nape Pro battery";
 
+            Point savedPosition;
+            if (StatusBarPositionStore.TryLoad(out savedPosition))
+            {
+                Location = ClampToScreen(savedPosition);
+                _hasPosition = true;
+            }
+
             MouseDown += delegate(object sender, MouseEventArgs e)
             {
                 if (e.Button == MouseButtons.Left)
                 {
-                    _dragging = true;
+                    _dragArmed = true;
+                    _dragging = false;
                     _dragOffset = e.Location;
+                    Capture = true;
                 }
             };
             MouseMove += delegate(object sender, MouseEventArgs e)
             {
-                if (_dragging)
+                if (!_dragArmed)
                 {
-                    Location = new Point(Left + e.X - _dragOffset.X, Top + e.Y - _dragOffset.Y);
+                    return;
                 }
+
+                if (!_dragging &&
+                    Math.Abs(e.X - _dragOffset.X) < DragThreshold &&
+                    Math.Abs(e.Y - _dragOffset.Y) < DragThreshold)
+                {
+                    return;
+                }
+
+                _dragging = true;
+                Point cursor = PointToScreen(e.Location);
+                Point desired = new Point(cursor.X - _dragOffset.X, cursor.Y - _dragOffset.Y);
+                Location = ClampToScreen(desired);
             };
-            MouseUp += delegate { _dragging = false; };
-            KeyPreview = true;
-            KeyDown += delegate(object sender, KeyEventArgs e)
+            MouseUp += delegate
             {
-                if (e.KeyCode == Keys.Escape)
+                if (_dragArmed && _dragging)
                 {
-                    Hide();
+                    StatusBarPositionStore.Save(Location);
                 }
+                _dragArmed = false;
+                _dragging = false;
+                Capture = false;
             };
         }
 
         internal void ShowAtTop()
         {
-            Screen screen = Screen.FromPoint(Cursor.Position);
-            Rectangle area = screen.WorkingArea;
-            Location = new Point(area.Left + (area.Width - Width) / 2, area.Top + 8);
+            if (!_hasPosition)
+            {
+                MoveToDefaultPosition();
+            }
+            else
+            {
+                Location = ClampToScreen(Location);
+            }
             Show();
             BringToFront();
+        }
+
+        internal void ResetPosition()
+        {
+            MoveToDefaultPosition();
+            if (Visible)
+            {
+                BringToFront();
+            }
+        }
+
+        protected override bool ShowWithoutActivation
+        {
+            get { return true; }
+        }
+
+        protected override CreateParams CreateParams
+        {
+            get
+            {
+                CreateParams parameters = base.CreateParams;
+                parameters.ExStyle |= 0x08000000; // WS_EX_NOACTIVATE
+                parameters.ExStyle |= 0x00000080; // WS_EX_TOOLWINDOW
+                return parameters;
+            }
+        }
+
+        private void MoveToDefaultPosition()
+        {
+            Screen screen = Screen.FromPoint(Cursor.Position);
+            Rectangle area = screen.WorkingArea;
+            Point desired = new Point(area.Left + (area.Width - Width) / 2, area.Top + 8);
+            Location = ClampToScreen(desired);
+            _hasPosition = true;
+            StatusBarPositionStore.Save(Location);
+        }
+
+        private Point ClampToScreen(Point desired)
+        {
+            Screen screen = Screen.FromRectangle(new Rectangle(desired, Size));
+            return StatusBarPlacement.ClampToBounds(desired, Size, screen.Bounds);
         }
 
         internal void SetStatus(int battery, string connection)

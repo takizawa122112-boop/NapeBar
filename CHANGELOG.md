@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.1.3] - 2026-08-15
+
+Make the status bar usable as a movable, persistent desktop overlay.
+
+- Allow the bar to be moved into the taskbar area while keeping it within the physical display.
+- Remember the bar position across restarts and add a tray-menu reset command.
+- Keep the bar visible when the notification-area menu or another window takes focus.
+- Show the bar with a left click on the tray icon.
+- Base receiver-versus-USB ordering on Product IDs instead of display labels.
+
 ## [0.1.2] - 2026-08-14
 
 Prefer the verified 2.4GHz receiver when both USB and receiver interfaces are connected.

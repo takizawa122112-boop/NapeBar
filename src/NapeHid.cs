@@ -930,11 +930,11 @@ namespace NapeProBatteryTray
 
         private static int TransportPriority(HidDeviceInfo device)
         {
-            if (device.ConnectionLabel == "2.4G")
+            if (device.ProductId == 0xD026)
             {
                 return 0;
             }
-            if (device.ConnectionLabel == "USB / device")
+            if (device.ProductId == 0x0440)
             {
                 return 1;
             }
