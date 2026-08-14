@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.4] - 2026-08-15
+
+Keep the status bar above the taskbar after the Windows shell changes topmost window order.
+
+- Reassert the status bar's topmost position every 400 ms without activating it.
+- Stop the timer cleanly when the status bar is disposed.
+
 ## [0.1.3] - 2026-08-15
 
 Make the status bar usable as a movable, persistent desktop overlay.
