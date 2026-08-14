@@ -40,6 +40,7 @@ Nape Pro本体やレシーバーのファームウェアバージョンによっ
 ## How it works
 
 NapeBarは、Keychron Launcherと同じベンダーHID経路を読み取り目的で利用します。`VID 0x3434` の `Usage Page 0xFF60` インターフェースへ32バイトの問い合わせを送り、`A7 31 <battery>` の応答に含まれる値を0〜100%として表示します。
+2.4GHzレシーバーとUSB接続を同時に検出した場合は、実機確認済みの2.4GHzレシーバーを優先します。
 
 ```text
 request:  A7 31 00 00 ...

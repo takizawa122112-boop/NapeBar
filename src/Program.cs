@@ -52,7 +52,7 @@ namespace NapeProBatteryTray
             }
 
             Console.WriteLine("Nape Pro Battery Probe");
-            Console.WriteLine("VID/PID 0x3434/0x0440 または 0xD026、UsagePage 0xFF60 を探索します。\n");
+            Console.WriteLine("VID/PID 0x3434/0x0440 または 0xD026、UsagePage 0xFF60 / 0x008C を探索します。\n");
             List<HidDeviceInfo> devices = HidEnumerator.Enumerate(delegate(string line) { Console.Error.WriteLine(line); });
             if (devices.Count == 0)
             {
@@ -96,21 +96,44 @@ namespace NapeProBatteryTray
 
         private static int RunSelfTest()
         {
+            int failures = 0;
             byte[] request = new byte[32];
             request[0] = 0xA7;
             request[1] = 0x31;
-            if (request[0] != 0xA7 || request[1] != 0x31)
+            if (request.Length != 32 || request[0] != 0xA7 || request[1] != 0x31)
             {
                 Console.WriteLine("FAIL request");
-                return 1;
+                failures++;
             }
             byte[] response = new byte[] { 0xA7, 0x31, 97 };
-            if (response[2] != 97)
+            if (response.Length != 3 || response[0] != 0xA7 || response[1] != 0x31 || response[2] != 97)
             {
                 Console.WriteLine("FAIL response");
+                failures++;
+            }
+
+            List<HidDeviceInfo> candidates = new List<HidDeviceInfo>
+            {
+                new HidDeviceInfo { Path = "usb-alt", VendorId = 0x3434, ProductId = 0x0440, UsagePage = 0x008C, ProductName = "Nape Pro" },
+                new HidDeviceInfo { Path = "receiver-alt", VendorId = 0x3434, ProductId = 0xD026, UsagePage = 0x008C, ProductName = "Keychron Link-KM" },
+                new HidDeviceInfo { Path = "usb-vendor", VendorId = 0x3434, ProductId = 0x0440, UsagePage = 0xFF60, ProductName = "Nape Pro" },
+                new HidDeviceInfo { Path = "receiver-vendor", VendorId = 0x3434, ProductId = 0xD026, UsagePage = 0xFF60, ProductName = "Keychron Link-KM" }
+            };
+            candidates.Sort(NapeBatteryReader.CompareCandidates);
+            if (candidates[0].ProductId != 0xD026 || candidates[0].UsagePage != 0xFF60 ||
+                candidates[1].ProductId != 0x0440 || candidates[1].UsagePage != 0xFF60 ||
+                candidates[2].ProductId != 0xD026 || candidates[2].UsagePage != 0x008C ||
+                candidates[3].ProductId != 0x0440 || candidates[3].UsagePage != 0x008C)
+            {
+                Console.WriteLine("FAIL candidate priority: 2.4G vendor HID must be first");
+                failures++;
+            }
+
+            if (failures != 0)
+            {
                 return 1;
             }
-            Console.WriteLine("PASS protocol packet self-test: A7 31 -> byte[2] battery");
+            Console.WriteLine("PASS protocol packet and candidate priority self-test");
             return 0;
         }
 
@@ -118,8 +141,9 @@ namespace NapeProBatteryTray
         {
             List<HidDeviceInfo> candidates = devices.FindAll(delegate(HidDeviceInfo item)
             {
-                return item.VendorId == 0x3434 && item.UsagePage == 0xFF60;
+                return item.IsNapeCandidate && item.UsagePage == 0xFF60;
             });
+            candidates.Sort(NapeBatteryReader.CompareCandidates);
             for (int i = 0; i < candidates.Count; i++)
             {
                 using (HidConnection connection = HidConnection.Open(candidates[i], delegate(string line) { Console.Error.WriteLine(line); }))

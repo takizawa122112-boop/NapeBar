@@ -778,25 +778,39 @@ namespace NapeProBatteryTray
             {
                 if (_log != null)
                 {
-                    _log("HidConnection.Dispose: closing handle");
+                    _log("HidConnection.Dispose: stopping reader");
                 }
                 NativeMethods.CancelIoEx(readHandle, IntPtr.Zero);
-                NativeMethods.CloseHandle(readHandle);
             }
-            if (writeHandle != IntPtr.Zero && writeHandle != NativeMethods.INVALID_HANDLE_VALUE)
-            {
-                NativeMethods.CloseHandle(writeHandle);
-            }
+
+            bool readerStopped = true;
             if (_readThread != null && _readThread.IsAlive && Thread.CurrentThread != _readThread)
             {
                 if (_log != null)
                 {
                     _log("HidConnection.Dispose: joining reader");
                 }
-                _readThread.Join(500);
+                readerStopped = _readThread.Join(2000);
             }
-            _batteryResponse.Close();
-            _anyResponse.Close();
+
+            if (readHandle != IntPtr.Zero && readHandle != NativeMethods.INVALID_HANDLE_VALUE)
+            {
+                NativeMethods.CloseHandle(readHandle);
+            }
+            if (writeHandle != IntPtr.Zero && writeHandle != NativeMethods.INVALID_HANDLE_VALUE)
+            {
+                NativeMethods.CloseHandle(writeHandle);
+            }
+
+            if (readerStopped)
+            {
+                _batteryResponse.Close();
+                _anyResponse.Close();
+            }
+            else if (_log != null)
+            {
+                _log("HidConnection.Dispose: reader did not stop; keeping wait handles alive");
+            }
         }
     }
 
@@ -876,10 +890,7 @@ namespace NapeProBatteryTray
         {
             List<HidDeviceInfo> devices = HidEnumerator.Enumerate(_log);
             List<HidDeviceInfo> candidates = devices.FindAll(delegate(HidDeviceInfo item) { return item.IsNapeCandidate; });
-            candidates.Sort(delegate(HidDeviceInfo left, HidDeviceInfo right)
-            {
-                return CandidatePriority(left).CompareTo(CandidatePriority(right));
-            });
+            candidates.Sort(CompareCandidates);
             if (candidates.Count == 0 && _log != null)
             {
                 _log("No Nape Pro vendor HID interface found.");
@@ -887,13 +898,43 @@ namespace NapeProBatteryTray
             return candidates;
         }
 
+        internal static int CompareCandidates(HidDeviceInfo left, HidDeviceInfo right)
+        {
+            int byUsagePage = CandidatePriority(left).CompareTo(CandidatePriority(right));
+            if (byUsagePage != 0)
+            {
+                return byUsagePage;
+            }
+
+            int byTransport = TransportPriority(left).CompareTo(TransportPriority(right));
+            if (byTransport != 0)
+            {
+                return byTransport;
+            }
+
+            return String.CompareOrdinal(left.Path ?? String.Empty, right.Path ?? String.Empty);
+        }
+
         private static int CandidatePriority(HidDeviceInfo device)
         {
-            if (device.UsagePage == 0x008C)
+            if (device.UsagePage == 0xFF60)
             {
                 return 0;
             }
-            if (device.UsagePage == 0xFF60)
+            if (device.UsagePage == 0x008C)
+            {
+                return 1;
+            }
+            return 2;
+        }
+
+        private static int TransportPriority(HidDeviceInfo device)
+        {
+            if (device.ConnectionLabel == "2.4G")
+            {
+                return 0;
+            }
+            if (device.ConnectionLabel == "USB / device")
             {
                 return 1;
             }

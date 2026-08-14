@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.1.2] - 2026-08-14
+
+Prefer the verified 2.4GHz receiver when both USB and receiver interfaces are connected.
+
+- Prefer `Usage Page 0xFF60` over `0x008C`.
+- Prefer `Keychron Link-KM` (`PID 0xD026`) over the wired device (`PID 0x0440`).
+- Make candidate ordering deterministic for diagnostics and battery polling.
+- Make HID reader shutdown wait for the reader thread before closing wait handles.
+- Extend the probe self-test to cover the complete candidate priority order.
+
 ## [0.1.1] - 2026-08-14
 
 Stability and status-bar interaction fix.
