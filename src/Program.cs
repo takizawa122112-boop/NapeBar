@@ -210,6 +210,7 @@ namespace NapeProBatteryTray
                 failures++;
             }
 
+            // 画面全体の矩形。下 48px はタスクバーだが、重ね置きを許すので配置可能。
             Rectangle screenBounds = new Rectangle(0, 0, 1440, 1440);
             Point taskbarPosition = StatusBarPlacement.ClampToBounds(
                 new Point(100, 1400), new Size(190, 38), screenBounds);
@@ -219,6 +220,7 @@ namespace NapeProBatteryTray
                 failures++;
             }
 
+            // 画面外だけは必ず引き戻す。1440 - 38 = 1402 が下限。
             Point offscreenPosition = StatusBarPlacement.ClampToBounds(
                 new Point(-100, 2000), new Size(190, 38), screenBounds);
             if (offscreenPosition.X != 0 || offscreenPosition.Y != 1402)
@@ -644,9 +646,31 @@ namespace NapeProBatteryTray
         }
     }
 
+    internal static class WindowZOrder
+    {
+        private static readonly IntPtr HwndTopMost = new IntPtr(-1);
+        private const uint SwpNoSize = 0x0001;
+        private const uint SwpNoMove = 0x0002;
+        private const uint SwpNoActivate = 0x0010;
+
+        [System.Runtime.InteropServices.DllImport("user32.dll", SetLastError = true)]
+        private static extern bool SetWindowPos(
+            IntPtr hWnd, IntPtr hWndInsertAfter, int x, int y, int cx, int cy, uint flags);
+
+        // タスクバーもこのバーと同じ TOPMOST 帯にいる。シェルがフライアウトなどで
+        // 自分を持ち上げると、こちらは WS_EX_NOACTIVATE で自力復帰できず下敷きになる。
+        // 定期的に TOPMOST 帯の先頭へ入れ直すことで、タスクバーの上に留まる。
+        internal static bool RaiseToTop(IntPtr handle)
+        {
+            return SetWindowPos(handle, HwndTopMost, 0, 0, 0, 0, SwpNoMove | SwpNoSize | SwpNoActivate);
+        }
+    }
+
     internal sealed class BatteryStatusBarForm : Form
     {
         private const int DragThreshold = 4;
+        private const int TopMostRecheckMs = 400;
+        private readonly System.Windows.Forms.Timer _topMostTimer;
         private int _battery = -1;
         private string _connection = "--";
         private bool _dragArmed;
@@ -715,6 +739,38 @@ namespace NapeProBatteryTray
                 _dragging = false;
                 Capture = false;
             };
+
+            _topMostTimer = new System.Windows.Forms.Timer();
+            _topMostTimer.Interval = TopMostRecheckMs;
+            _topMostTimer.Tick += delegate { KeepAboveTaskbar(); };
+            _topMostTimer.Start();
+        }
+
+        private void KeepAboveTaskbar()
+        {
+            if (!Visible || !IsHandleCreated || IsDisposed)
+            {
+                return;
+            }
+
+            try
+            {
+                WindowZOrder.RaiseToTop(Handle);
+            }
+            catch (Exception ex)
+            {
+                AppLog.Write("Failed to keep the status bar above the taskbar: " + ex);
+            }
+        }
+
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing && _topMostTimer != null)
+            {
+                _topMostTimer.Stop();
+                _topMostTimer.Dispose();
+            }
+            base.Dispose(disposing);
         }
 
         internal void ShowAtTop()
@@ -768,6 +824,9 @@ namespace NapeProBatteryTray
 
         private Point ClampToScreen(Point desired)
         {
+            // WorkingArea ではなく Bounds に収める。タスクバーへの重ね置きを許すためで、
+            // 重なっても見え続けることは KeepAboveTaskbar の定期再前面化が担保する。
+            // 画面外へ出ることだけは Bounds が防ぐ。
             Screen screen = Screen.FromRectangle(new Rectangle(desired, Size));
             return StatusBarPlacement.ClampToBounds(desired, Size, screen.Bounds);
         }
