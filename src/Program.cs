@@ -174,11 +174,26 @@ namespace NapeProBatteryTray
 
                 Application.EnableVisualStyles();
                 Application.SetCompatibleTextRenderingDefault(false);
+                Application.SetUnhandledExceptionMode(UnhandledExceptionMode.CatchException);
+                Application.ThreadException += OnThreadException;
+                AppDomain.CurrentDomain.UnhandledException += OnUnhandledException;
                 using (TrayApplicationContext context = new TrayApplicationContext())
                 {
                     Application.Run(context);
                 }
             }
+        }
+
+        private static void OnThreadException(object sender, ThreadExceptionEventArgs e)
+        {
+            AppLog.Write("UI thread exception: " + e.Exception);
+        }
+
+        private static void OnUnhandledException(object sender, UnhandledExceptionEventArgs e)
+        {
+            Exception exception = e.ExceptionObject as Exception;
+            AppLog.Write("Unhandled exception (terminating=" + e.IsTerminating + "): " +
+                (exception == null ? Convert.ToString(e.ExceptionObject) : exception.ToString()));
         }
     }
 
@@ -194,6 +209,7 @@ namespace NapeProBatteryTray
         private ToolStripMenuItem _statusBarItem;
         private Icon _currentIcon;
         private bool _busy;
+        private volatile bool _closing;
 
         internal TrayApplicationContext()
         {
@@ -206,7 +222,6 @@ namespace NapeProBatteryTray
             _currentIcon = TrayIconFactory.Create(null);
             _notifyIcon.Icon = _currentIcon;
             _statusBar = new BatteryStatusBarForm();
-            _statusBar.ShowAtTop();
 
             ContextMenuStrip menu = new ContextMenuStrip();
             ToolStripMenuItem statusItem = new ToolStripMenuItem("Nape Pro: 確認中...");
@@ -219,8 +234,7 @@ namespace NapeProBatteryTray
             ToolStripMenuItem launcherItem = new ToolStripMenuItem("Keychron Launcherを開く");
             launcherItem.Click += delegate { OpenLauncher(); };
             menu.Items.Add(launcherItem);
-            _statusBarItem = new ToolStripMenuItem("上部ステータスバーを表示");
-            _statusBarItem.Checked = true;
+            _statusBarItem = new ToolStripMenuItem("上部ステータスバーを隠す");
             _statusBarItem.Click += delegate { ToggleStatusBar(); };
             menu.Items.Add(_statusBarItem);
             menu.Items.Add(new ToolStripSeparator());
@@ -240,44 +254,67 @@ namespace NapeProBatteryTray
             exitItem.Click += delegate { ExitThread(); };
             menu.Items.Add(exitItem);
             _notifyIcon.ContextMenuStrip = menu;
+            _statusBar.VisibleChanged += delegate { UpdateStatusBarMenu(); };
+            _statusBar.ShowAtTop();
+            UpdateStatusBarMenu();
 
             _timer = new System.Windows.Forms.Timer();
             _timer.Interval = 60000;
             _timer.Tick += delegate { RefreshBattery(statusItem); };
             _timer.Start();
 
-            _notifyIcon.DoubleClick += delegate { ToggleStatusBar(); };
+            _notifyIcon.DoubleClick += delegate { ShowStatusBar(); };
             RefreshBattery(statusItem);
         }
 
         private void RefreshBattery(ToolStripMenuItem statusItem)
         {
-            if (_busy)
+            if (_closing || _busy)
             {
                 return;
             }
             _busy = true;
             ThreadPool.QueueUserWorkItem(delegate
             {
-                BatteryReading result = _reader.Query(2500);
+                BatteryReading result;
+                try
+                {
+                    result = _reader.Query(2500);
+                }
+                catch (Exception ex)
+                {
+                    AppLog.Write("Battery query exception: " + ex);
+                    result = BatteryReading.Failed("Battery query failed.");
+                }
+
                 BeginInvokeIfAlive(delegate
                 {
-                    _busy = false;
-                    if (result.Success)
+                    try
                     {
-                        string connection = result.Device == null ? "HID" : result.Device.ConnectionLabel;
-                        string text = String.Format("Nape Pro: {0}% ({1})", result.BatteryLevel, connection);
-                        statusItem.Text = text;
-                        _notifyIcon.Text = text.Length > 63 ? text.Substring(0, 63) : text;
-                        ReplaceIcon(TrayIconFactory.Create(result.BatteryLevel));
-                        _statusBar.SetStatus(result.BatteryLevel, connection);
+                        if (result.Success)
+                        {
+                            string connection = result.Device == null ? "HID" : result.Device.ConnectionLabel;
+                            string text = String.Format("Nape Pro: {0}% ({1})", result.BatteryLevel, connection);
+                            statusItem.Text = text;
+                            _notifyIcon.Text = text.Length > 63 ? text.Substring(0, 63) : text;
+                            ReplaceIcon(TrayIconFactory.Create(result.BatteryLevel));
+                            _statusBar.SetStatus(result.BatteryLevel, connection);
+                        }
+                        else
+                        {
+                            statusItem.Text = "Nape Pro: 未接続 / 未取得";
+                            _notifyIcon.Text = "Nape Pro: 未接続 / 未取得";
+                            ReplaceIcon(TrayIconFactory.Create(null));
+                            _statusBar.SetError();
+                        }
                     }
-                    else
+                    catch (Exception ex)
                     {
-                        statusItem.Text = "Nape Pro: 未接続 / 未取得";
-                        _notifyIcon.Text = "Nape Pro: 未接続 / 未取得";
-                        ReplaceIcon(TrayIconFactory.Create(null));
-                        _statusBar.SetError();
+                        AppLog.Write("Battery UI update exception: " + ex);
+                    }
+                    finally
+                    {
+                        _busy = false;
                     }
                 });
             });
@@ -285,30 +322,96 @@ namespace NapeProBatteryTray
 
         private void ToggleStatusBar()
         {
+            if (_closing)
+            {
+                return;
+            }
+
             if (_statusBar.Visible)
             {
-                _statusBar.Hide();
-                _statusBarItem.Checked = false;
+                HideStatusBar();
             }
             else
             {
-                _statusBar.ShowAtTop();
-                _statusBarItem.Checked = true;
+                ShowStatusBar();
             }
+        }
+
+        private void ShowStatusBar()
+        {
+            if (_closing)
+            {
+                return;
+            }
+
+            try
+            {
+                _statusBar.ShowAtTop();
+                UpdateStatusBarMenu();
+            }
+            catch (Exception ex)
+            {
+                AppLog.Write("Failed to show status bar: " + ex);
+            }
+        }
+
+        private void HideStatusBar()
+        {
+            try
+            {
+                _statusBar.Hide();
+                UpdateStatusBarMenu();
+            }
+            catch (Exception ex)
+            {
+                AppLog.Write("Failed to hide status bar: " + ex);
+            }
+        }
+
+        private void UpdateStatusBarMenu()
+        {
+            if (_statusBarItem == null)
+            {
+                return;
+            }
+
+            bool visible = _statusBar.Visible;
+            _statusBarItem.Checked = visible;
+            _statusBarItem.Text = visible ? "上部ステータスバーを隠す" : "上部ステータスバーを表示";
         }
 
         private void BeginInvokeIfAlive(MethodInvoker callback)
         {
             try
             {
-                if (!_dispatcher.IsDisposed && _dispatcher.IsHandleCreated)
+                if (_closing || _dispatcher.IsDisposed || !_dispatcher.IsHandleCreated)
                 {
-                    _dispatcher.BeginInvoke(callback);
+                    return;
                 }
+
+                _dispatcher.BeginInvoke(new MethodInvoker(delegate
+                {
+                    if (_closing)
+                    {
+                        return;
+                    }
+
+                    try
+                    {
+                        callback();
+                    }
+                    catch (Exception ex)
+                    {
+                        AppLog.Write("UI callback exception: " + ex);
+                    }
+                }));
             }
-            catch
+            catch (Exception ex)
             {
-                try { callback(); } catch { }
+                if (!_closing)
+                {
+                    AppLog.Write("UI dispatch exception: " + ex);
+                }
             }
         }
 
@@ -364,16 +467,38 @@ namespace NapeProBatteryTray
 
         protected override void ExitThreadCore()
         {
+            _closing = true;
             _timer.Stop();
-            _reader.Dispose();
-            _statusBar.Close();
-            _statusBar.Dispose();
-            _dispatcher.Dispose();
-            _notifyIcon.Visible = false;
-            _notifyIcon.Dispose();
-            if (_currentIcon != null)
+            try
             {
-                _currentIcon.Dispose();
+                _reader.Dispose();
+            }
+            catch (Exception ex)
+            {
+                AppLog.Write("Reader dispose exception: " + ex);
+            }
+            try
+            {
+                _statusBar.Hide();
+                _statusBar.Dispose();
+            }
+            catch (Exception ex)
+            {
+                AppLog.Write("Status bar dispose exception: " + ex);
+            }
+            try
+            {
+                _dispatcher.Dispose();
+                _notifyIcon.Visible = false;
+                _notifyIcon.Dispose();
+                if (_currentIcon != null)
+                {
+                    _currentIcon.Dispose();
+                }
+            }
+            catch (Exception ex)
+            {
+                AppLog.Write("Tray cleanup exception: " + ex);
             }
             base.ExitThreadCore();
         }

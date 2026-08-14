@@ -15,6 +15,7 @@ Keychron Launcherを常駐させなくても、2.4GHzレシーバー経由で残
 - 2.4GHzレシーバー経由のバッテリー取得
 - 60秒ごとの自動更新と手動更新
 - ステータスバーのドラッグ移動、表示／非表示切り替え
+- 通知領域アイコンのダブルクリックでステータスバーを表示
 - Windowsログオン時の自動起動
 - Keychron Launcherを開くショートカット
 - 追加のNuGetパッケージ不要
@@ -90,6 +91,7 @@ BATTERY=94%  DEVICE=Keychron Link-KM  CONNECTION=2.4G
 Keychron Launcherが同時にHIDデバイスを使用していると、Windows側でインターフェースを開けない場合があります。その場合はLauncherのタブを閉じてから再試行してください。
 
 ログは `%LOCALAPPDATA%\NapeProBatteryTray\app.log` に保存されます。
+予期しない例外が発生した場合も、このログに記録して常駐を継続するようにしています。
 
 ## Credits
 
