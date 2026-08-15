@@ -31,4 +31,5 @@ if ($LASTEXITCODE -ne 0) { throw "Tray build failed: $LASTEXITCODE" }
 if ($LASTEXITCODE -ne 0) { throw "Probe build failed: $LASTEXITCODE" }
 
 Copy-Item -LiteralPath (Join-Path $projectRoot 'README.md') -Destination $outputRoot -Force
+Copy-Item -LiteralPath $trayOutput -Destination (Join-Path $projectRoot 'NapeProBatteryTray.exe') -Force
 Write-Host "Built: $outputRoot"

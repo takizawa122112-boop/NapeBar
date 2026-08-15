@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.1.6] - 2026-08-15
+
+Use a compact status bar when the connection label is hidden.
+
+- Shrink the status bar from 190px to 112px when `2.4G表示` is unchecked.
+- Restore the full width when the connection label is shown again.
+- Keep the resized bar within the active display and persist its adjusted position.
+
 ## [0.1.5] - 2026-08-15
 
 Add an option to hide the connection label from the status bar.

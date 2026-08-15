@@ -125,3 +125,5 @@ Build with the .NET Framework C# compiler included with Windows:
 ```
 
 This is an unofficial community project and is not affiliated with Keychron. MIT licensed.
+
+For local convenience, `build.ps1` also copies the latest tray executable to the project root. The diagnostic probe remains under `build\`.

@@ -186,6 +186,18 @@ namespace NapeProBatteryTray
         }
     }
 
+    internal static class StatusBarLayout
+    {
+        internal const int ExpandedWidth = 190;
+        internal const int CompactWidth = 112;
+        internal const int Height = 38;
+
+        internal static int WidthFor(bool showConnection)
+        {
+            return showConnection ? ExpandedWidth : CompactWidth;
+        }
+    }
+
 #if PROBE
     internal static class Program
     {
@@ -318,6 +330,12 @@ namespace NapeProBatteryTray
             if (StatusBarDisplaySettings.TryParse("unexpected", out showConnection))
             {
                 Console.WriteLine("FAIL connection display setting: invalid value accepted");
+                failures++;
+            }
+
+            if (StatusBarLayout.WidthFor(true) != 190 || StatusBarLayout.WidthFor(false) != 112)
+            {
+                Console.WriteLine("FAIL status bar layout width");
                 failures++;
             }
 
@@ -780,13 +798,14 @@ namespace NapeProBatteryTray
             ControlBox = false;
             TopMost = true;
             StartPosition = FormStartPosition.Manual;
-            Size = new Size(190, 38);
+            Size = new Size(StatusBarLayout.ExpandedWidth, StatusBarLayout.Height);
             BackColor = Color.FromArgb(38, 48, 59);
             ForeColor = Color.White;
             DoubleBuffered = true;
             Cursor = Cursors.SizeAll;
             Text = "Nape Pro battery";
             _showConnection = StatusBarDisplaySettings.Load();
+            Size = new Size(StatusBarLayout.WidthFor(_showConnection), StatusBarLayout.Height);
 
             Point savedPosition;
             if (StatusBarPositionStore.TryLoad(out savedPosition))
@@ -903,6 +922,9 @@ namespace NapeProBatteryTray
                 return;
             }
             _showConnection = showConnection;
+            Size = new Size(StatusBarLayout.WidthFor(_showConnection), StatusBarLayout.Height);
+            Location = ClampToScreen(Location);
+            StatusBarPositionStore.Save(Location);
             Invalidate();
         }
 
