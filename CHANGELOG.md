@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.1.5] - 2026-08-15
+
+Add an option to hide the connection label from the status bar.
+
+- Add a checked `2.4G表示` tray-menu item.
+- Persist the connection-label visibility choice across restarts.
+- Keep the battery percentage visible when the connection label is hidden.
+
 ## [0.1.4] - 2026-08-15
 
 Keep the status bar above the taskbar after the Windows shell changes topmost window order.

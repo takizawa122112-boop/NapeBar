@@ -119,6 +119,73 @@ namespace NapeProBatteryTray
         }
     }
 
+    internal static class StatusBarDisplaySettings
+    {
+        private static readonly string FilePath = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "NapeProBatteryTray",
+            "show-connection.txt");
+
+        internal static bool Load()
+        {
+            bool showConnection;
+            return TryLoad(out showConnection) ? showConnection : true;
+        }
+
+        internal static bool TryParse(string value, out bool showConnection)
+        {
+            showConnection = true;
+            if (String.IsNullOrWhiteSpace(value))
+            {
+                return false;
+            }
+
+            string normalized = value.Trim();
+            if (normalized == "1" || String.Equals(normalized, "true", StringComparison.OrdinalIgnoreCase))
+            {
+                showConnection = true;
+                return true;
+            }
+            if (normalized == "0" || String.Equals(normalized, "false", StringComparison.OrdinalIgnoreCase))
+            {
+                showConnection = false;
+                return true;
+            }
+            return false;
+        }
+
+        internal static bool TryLoad(out bool showConnection)
+        {
+            showConnection = true;
+            try
+            {
+                if (!File.Exists(FilePath))
+                {
+                    return false;
+                }
+                return TryParse(File.ReadAllText(FilePath), out showConnection);
+            }
+            catch (Exception ex)
+            {
+                AppLog.Write("Failed to load status bar display setting: " + ex);
+                return false;
+            }
+        }
+
+        internal static void Save(bool showConnection)
+        {
+            try
+            {
+                Directory.CreateDirectory(Path.GetDirectoryName(FilePath));
+                File.WriteAllText(FilePath, showConnection ? "1" : "0");
+            }
+            catch (Exception ex)
+            {
+                AppLog.Write("Failed to save status bar display setting: " + ex);
+            }
+        }
+    }
+
 #if PROBE
     internal static class Program
     {
@@ -234,6 +301,23 @@ namespace NapeProBatteryTray
                 savedPosition.X != 2853 || savedPosition.Y != 1397)
             {
                 Console.WriteLine("FAIL position persistence format");
+                failures++;
+            }
+
+            bool showConnection;
+            if (!StatusBarDisplaySettings.TryParse("1", out showConnection) || !showConnection)
+            {
+                Console.WriteLine("FAIL connection display setting: 1 must show");
+                failures++;
+            }
+            if (!StatusBarDisplaySettings.TryParse("0", out showConnection) || showConnection)
+            {
+                Console.WriteLine("FAIL connection display setting: 0 must hide");
+                failures++;
+            }
+            if (StatusBarDisplaySettings.TryParse("unexpected", out showConnection))
+            {
+                Console.WriteLine("FAIL connection display setting: invalid value accepted");
                 failures++;
             }
 
@@ -372,6 +456,15 @@ namespace NapeProBatteryTray
             ToolStripMenuItem resetStatusBarItem = new ToolStripMenuItem("ステータスバーの位置をリセット");
             resetStatusBarItem.Click += delegate { _statusBar.ResetPosition(); };
             menu.Items.Add(resetStatusBarItem);
+            ToolStripMenuItem showConnectionItem = new ToolStripMenuItem("2.4G表示");
+            showConnectionItem.Checked = _statusBar.ShowConnection;
+            showConnectionItem.CheckOnClick = true;
+            showConnectionItem.Click += delegate
+            {
+                StatusBarDisplaySettings.Save(showConnectionItem.Checked);
+                _statusBar.SetShowConnection(showConnectionItem.Checked);
+            };
+            menu.Items.Add(showConnectionItem);
             menu.Items.Add(new ToolStripSeparator());
             _startWithWindowsItem = new ToolStripMenuItem("Windows起動時に自動起動");
             _startWithWindowsItem.Checked = StartupSettings.IsEnabled();
@@ -677,6 +770,7 @@ namespace NapeProBatteryTray
         private bool _dragging;
         private Point _dragOffset;
         private bool _hasPosition;
+        private bool _showConnection;
 
         internal BatteryStatusBarForm()
         {
@@ -692,6 +786,7 @@ namespace NapeProBatteryTray
             DoubleBuffered = true;
             Cursor = Cursors.SizeAll;
             Text = "Nape Pro battery";
+            _showConnection = StatusBarDisplaySettings.Load();
 
             Point savedPosition;
             if (StatusBarPositionStore.TryLoad(out savedPosition))
@@ -796,6 +891,21 @@ namespace NapeProBatteryTray
             }
         }
 
+        internal bool ShowConnection
+        {
+            get { return _showConnection; }
+        }
+
+        internal void SetShowConnection(bool showConnection)
+        {
+            if (_showConnection == showConnection)
+            {
+                return;
+            }
+            _showConnection = showConnection;
+            Invalidate();
+        }
+
         protected override bool ShowWithoutActivation
         {
             get { return true; }
@@ -884,8 +994,11 @@ namespace NapeProBatteryTray
                 centered.LineAlignment = StringAlignment.Center;
                 string percent = _battery < 0 ? "--" : _battery.ToString() + "%";
                 graphics.DrawString(percent, percentFont, textBrush, new RectangleF(38, 3, 62, 31), centered);
-                graphics.DrawLine(dividerPen, 106, 9, 106, 29);
-                graphics.DrawString(_connection, connectionFont, secondaryBrush, new RectangleF(115, 4, 66, 29), centered);
+                if (_showConnection)
+                {
+                    graphics.DrawLine(dividerPen, 106, 9, 106, 29);
+                    graphics.DrawString(_connection, connectionFont, secondaryBrush, new RectangleF(115, 4, 66, 29), centered);
+                }
             }
         }
 
