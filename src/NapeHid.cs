@@ -889,12 +889,32 @@ namespace NapeBar
         private List<HidDeviceInfo> GetCandidates()
         {
             List<HidDeviceInfo> devices = HidEnumerator.Enumerate(_log);
-            List<HidDeviceInfo> candidates = devices.FindAll(delegate(HidDeviceInfo item) { return item.IsNapeCandidate; });
-            candidates.Sort(CompareCandidates);
+            List<HidDeviceInfo> candidates = SelectQueryCandidates(devices);
             if (candidates.Count == 0 && _log != null)
             {
                 _log("No Nape Pro vendor HID interface found.");
             }
+            return candidates;
+        }
+
+        internal static List<HidDeviceInfo> SelectQueryCandidates(List<HidDeviceInfo> devices)
+        {
+            List<HidDeviceInfo> candidates = devices.FindAll(delegate(HidDeviceInfo item)
+            {
+                return item.IsNapeCandidate;
+            });
+            bool hasVerifiedVendorInterface = candidates.Exists(delegate(HidDeviceInfo item)
+            {
+                return item.UsagePage == 0xFF60;
+            });
+            if (hasVerifiedVendorInterface)
+            {
+                candidates = candidates.FindAll(delegate(HidDeviceInfo item)
+                {
+                    return item.UsagePage == 0xFF60;
+                });
+            }
+            candidates.Sort(CompareCandidates);
             return candidates;
         }
 

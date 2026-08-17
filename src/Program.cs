@@ -364,6 +364,33 @@ namespace NapeBar
                 failures++;
             }
 
+            List<HidDeviceInfo> queryCandidates = NapeBatteryReader.SelectQueryCandidates(candidates);
+            if (queryCandidates.Count != 2 ||
+                queryCandidates[0].UsagePage != 0xFF60 ||
+                queryCandidates[1].UsagePage != 0xFF60)
+            {
+                Console.WriteLine("FAIL query candidates: 0x008C must be excluded when 0xFF60 exists");
+                failures++;
+            }
+
+            List<HidDeviceInfo> alternateOnly = NapeBatteryReader.SelectQueryCandidates(
+                new List<HidDeviceInfo>
+                {
+                    new HidDeviceInfo
+                    {
+                        Path = "receiver-alt-only",
+                        VendorId = 0x3434,
+                        ProductId = 0xD026,
+                        UsagePage = 0x008C,
+                        ProductName = "Keychron Link-KM"
+                    }
+                });
+            if (alternateOnly.Count != 1 || alternateOnly[0].UsagePage != 0x008C)
+            {
+                Console.WriteLine("FAIL query candidates: 0x008C fallback must remain when 0xFF60 is absent");
+                failures++;
+            }
+
             // 画面全体の矩形。下 48px はタスクバーだが、重ね置きを許すので配置可能。
             Rectangle screenBounds = new Rectangle(0, 0, 1440, 1440);
             Point taskbarPosition = StatusBarPlacement.ClampToBounds(

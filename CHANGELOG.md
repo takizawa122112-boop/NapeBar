@@ -8,6 +8,7 @@ Polish the application identity and long-running behavior.
 - Cap `app.log` at 2 MiB and keep one rotated `app.old.log` generation.
 - Compare the Windows startup entry with the current executable path.
 - Migrate the legacy `NapeProBatteryTray` startup entry to `NapeBar`.
+- Skip the unverified `0x008C` interface whenever the verified `0xFF60` interface is available.
 
 ## [0.1.6] - 2026-08-15
 
