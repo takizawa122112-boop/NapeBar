@@ -24,7 +24,7 @@ Keychron Launcherを常駐させなくても、2.4GHzレシーバー経由で残
 
 最新版は [Releases](https://github.com/takizawa122112-boop/NapeBar/releases) から、`NapeBar-v*-win-x64.zip` をダウンロードしてください。
 
-ZIPを展開し、`NapeProBatteryTray.exe` を起動します。インストーラーはありません。終了する場合は通知領域のアイコンを右クリックして「終了」を選びます。
+ZIPを展開し、`NapeBar.exe` を起動します。インストーラーはありません。終了する場合は通知領域のアイコンを右クリックして「終了」を選びます。
 
 初回起動時にWindows SmartScreenが表示される場合があります。個人署名のない実行ファイルであるためで、ソースコードとビルド手順はこのリポジトリで確認できます。
 
@@ -60,7 +60,7 @@ Set-Location 'C:\path\to\NapeBar'
 
 生成物:
 
-- `build\NapeProBatteryTray.exe` — 常駐アプリ
+- `build\NapeBar.exe` — 常駐アプリ
 - `build\NapeBatteryProbe.exe` — 通信確認用CLI
 
 ## Troubleshooting
@@ -92,6 +92,7 @@ BATTERY=94%  DEVICE=Keychron Link-KM  CONNECTION=2.4G
 Keychron Launcherが同時にHIDデバイスを使用していると、Windows側でインターフェースを開けない場合があります。その場合はLauncherのタブを閉じてから再試行してください。
 
 ログは `%LOCALAPPDATA%\NapeProBatteryTray\app.log` に保存されます。
+`app.log` は最大2MiBで、上限を超えると直前のログを `app.old.log` として1世代だけ保持します。
 予期しない例外が発生した場合も、このログに記録して常駐を継続するようにしています。
 
 ## Credits
@@ -114,7 +115,7 @@ NapeBar is an unofficial Windows battery indicator for the Keychron Nape Pro tra
 
 The status bar can be dragged anywhere inside the physical display, including over the taskbar. Its position is saved and restored after a restart. Left-clicking the tray icon shows it again without activating it, and the tray menu includes position reset and connection-label visibility controls.
 
-Download `NapeBar-v*-win-x64.zip` from [Releases](https://github.com/takizawa122112-boop/NapeBar/releases), extract it, and run `NapeProBatteryTray.exe`.
+Download `NapeBar-v*-win-x64.zip` from [Releases](https://github.com/takizawa122112-boop/NapeBar/releases), extract it, and run `NapeBar.exe`.
 
 The verified path is the 2.4GHz receiver (`Keychron Link-KM`, VID `0x3434`, PID `0xD026`). USB detection support is included, but USB hardware verification is still welcome. The app does not write firmware or change device settings.
 

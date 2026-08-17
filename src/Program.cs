@@ -10,25 +10,100 @@ using System.Text;
 using System.Threading;
 using System.Windows.Forms;
 
-namespace NapeProBatteryTray
+namespace NapeBar
 {
+    internal static class LogRotation
+    {
+        internal static bool ShouldRotate(long currentBytes, int incomingBytes, long maximumBytes)
+        {
+            return currentBytes > 0 && incomingBytes > maximumBytes - currentBytes;
+        }
+
+        internal static void RotateIfNeeded(
+            string currentPath,
+            string oldPath,
+            long maximumBytes,
+            int incomingBytes)
+        {
+            if (!File.Exists(currentPath) ||
+                !ShouldRotate(new FileInfo(currentPath).Length, incomingBytes, maximumBytes))
+            {
+                return;
+            }
+
+            if (File.Exists(oldPath))
+            {
+                File.Delete(oldPath);
+            }
+            File.Move(currentPath, oldPath);
+        }
+    }
+
+    internal static class StartupCommand
+    {
+        internal static string ExtractExecutablePath(string command)
+        {
+            if (String.IsNullOrWhiteSpace(command))
+            {
+                return null;
+            }
+
+            string trimmed = command.Trim();
+            if (trimmed[0] == '"')
+            {
+                int closingQuote = trimmed.IndexOf('"', 1);
+                return closingQuote > 1 ? trimmed.Substring(1, closingQuote - 1) : null;
+            }
+
+            int firstSpace = trimmed.IndexOf(' ');
+            return firstSpace < 0 ? trimmed : trimmed.Substring(0, firstSpace);
+        }
+
+        internal static bool IsCurrentExecutable(string command, string currentExecutable)
+        {
+            string registeredExecutable = ExtractExecutablePath(command);
+            if (String.IsNullOrEmpty(registeredExecutable) || String.IsNullOrEmpty(currentExecutable))
+            {
+                return false;
+            }
+
+            try
+            {
+                return String.Equals(
+                    Path.GetFullPath(registeredExecutable),
+                    Path.GetFullPath(currentExecutable),
+                    StringComparison.OrdinalIgnoreCase);
+            }
+            catch
+            {
+                return false;
+            }
+        }
+    }
+
     internal static class AppLog
     {
+        private const long MaximumLogBytes = 2L * 1024L * 1024L;
         private static readonly object Gate = new object();
         private static readonly string DirectoryPath = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
             "NapeProBatteryTray");
         private static readonly string FilePath = Path.Combine(DirectoryPath, "app.log");
+        private static readonly string OldFilePath = Path.Combine(DirectoryPath, "app.old.log");
 
         internal static void Write(string message)
         {
-            string line = String.Format("{0:yyyy-MM-dd HH:mm:ss.fff} {1}", DateTime.Now, message);
+            string line = String.Format("{0:yyyy-MM-dd HH:mm:ss.fff} {1}{2}",
+                DateTime.Now, message, Environment.NewLine);
             lock (Gate)
             {
                 try
                 {
                     Directory.CreateDirectory(DirectoryPath);
-                    File.AppendAllText(FilePath, line + Environment.NewLine);
+                    int incomingBytes = Encoding.UTF8.GetByteCount(line);
+                    LogRotation.RotateIfNeeded(
+                        FilePath, OldFilePath, MaximumLogBytes, incomingBytes);
+                    File.AppendAllText(FilePath, line);
                 }
                 catch
                 {
@@ -339,11 +414,79 @@ namespace NapeProBatteryTray
                 failures++;
             }
 
+            if (LogRotation.ShouldRotate(100, 20, 120) ||
+                !LogRotation.ShouldRotate(100, 21, 120))
+            {
+                Console.WriteLine("FAIL log rotation boundary");
+                failures++;
+            }
+
+            string rotationDirectory = Path.Combine(
+                Path.GetTempPath(), "NapeBar-self-test-" + Guid.NewGuid().ToString("N"));
+            try
+            {
+                Directory.CreateDirectory(rotationDirectory);
+                string currentLog = Path.Combine(rotationDirectory, "app.log");
+                string oldLog = Path.Combine(rotationDirectory, "app.old.log");
+                File.WriteAllText(currentLog, "1234567890");
+                File.WriteAllText(oldLog, "stale");
+                LogRotation.RotateIfNeeded(currentLog, oldLog, 10, 1);
+                if (File.Exists(currentLog) || File.ReadAllText(oldLog) != "1234567890")
+                {
+                    Console.WriteLine("FAIL log file rotation");
+                    failures++;
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine("FAIL log file rotation: " + ex.Message);
+                failures++;
+            }
+            finally
+            {
+                try
+                {
+                    if (Directory.Exists(rotationDirectory))
+                    {
+                        Directory.Delete(rotationDirectory, true);
+                    }
+                }
+                catch
+                {
+                }
+            }
+
+            string currentExecutable = @"C:\Tools\NapeBar\NapeBar.exe";
+            if (!StartupCommand.IsCurrentExecutable(
+                    "\"C:\\Tools\\NapeBar\\NapeBar.exe\"",
+                    currentExecutable) ||
+                StartupCommand.IsCurrentExecutable(
+                    "\"C:\\Downloads\\NapeBar.exe\"",
+                    currentExecutable))
+            {
+                Console.WriteLine("FAIL startup executable path comparison");
+                failures++;
+            }
+
+            AssemblyProductAttribute product = (AssemblyProductAttribute)Attribute.GetCustomAttribute(
+                Assembly.GetExecutingAssembly(), typeof(AssemblyProductAttribute));
+            AssemblyDescriptionAttribute description = (AssemblyDescriptionAttribute)Attribute.GetCustomAttribute(
+                Assembly.GetExecutingAssembly(), typeof(AssemblyDescriptionAttribute));
+            AssemblyFileVersionAttribute fileVersion = (AssemblyFileVersionAttribute)Attribute.GetCustomAttribute(
+                Assembly.GetExecutingAssembly(), typeof(AssemblyFileVersionAttribute));
+            if (product == null || product.Product != "NapeBar" ||
+                description == null || description.Description != "Battery monitor for Keychron Nape Pro" ||
+                fileVersion == null || fileVersion.Version != "0.1.7.0")
+            {
+                Console.WriteLine("FAIL NapeBar assembly metadata");
+                failures++;
+            }
+
             if (failures != 0)
             {
                 return 1;
             }
-            Console.WriteLine("PASS protocol, candidate priority, and UI placement self-test");
+            Console.WriteLine("PASS protocol, UI, log rotation, startup path, and product identity self-test");
             return 0;
         }
 
@@ -447,6 +590,7 @@ namespace NapeProBatteryTray
 
         internal TrayApplicationContext()
         {
+            StartupSettings.MigrateExistingRegistration();
             _reader = new NapeBatteryReader(AppLog.Write);
             _dispatcher = new Control();
             _dispatcher.CreateControl();
@@ -1080,13 +1224,46 @@ namespace NapeProBatteryTray
     internal static class StartupSettings
     {
         private const string RunKey = "Software\\Microsoft\\Windows\\CurrentVersion\\Run";
-        private const string ValueName = "NapeProBatteryTray";
+        private const string ValueName = "NapeBar";
+        private const string LegacyValueName = "NapeProBatteryTray";
+
+        private static string CurrentExecutable
+        {
+            get { return Assembly.GetExecutingAssembly().Location; }
+        }
+
+        private static string CurrentCommand
+        {
+            get { return '"' + CurrentExecutable + '"'; }
+        }
 
         internal static bool IsEnabled()
         {
             using (Microsoft.Win32.RegistryKey key = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(RunKey, false))
             {
-                return key != null && key.GetValue(ValueName) != null;
+                string command = key == null ? null : Convert.ToString(key.GetValue(ValueName));
+                return StartupCommand.IsCurrentExecutable(command, CurrentExecutable);
+            }
+        }
+
+        internal static void MigrateExistingRegistration()
+        {
+            try
+            {
+                using (Microsoft.Win32.RegistryKey key = Microsoft.Win32.Registry.CurrentUser.CreateSubKey(RunKey))
+                {
+                    object currentValue = key.GetValue(ValueName);
+                    object legacyValue = key.GetValue(LegacyValueName);
+                    if (currentValue != null || legacyValue != null)
+                    {
+                        key.SetValue(ValueName, CurrentCommand);
+                    }
+                    key.DeleteValue(LegacyValueName, false);
+                }
+            }
+            catch (Exception ex)
+            {
+                AppLog.Write("Failed to migrate startup registration: " + ex.Message);
             }
         }
 
@@ -1096,12 +1273,13 @@ namespace NapeProBatteryTray
             {
                 if (enabled)
                 {
-                    key.SetValue(ValueName, '"' + Assembly.GetExecutingAssembly().Location + '"');
+                    key.SetValue(ValueName, CurrentCommand);
                 }
                 else
                 {
                     key.DeleteValue(ValueName, false);
                 }
+                key.DeleteValue(LegacyValueName, false);
             }
         }
     }

@@ -25,6 +25,6 @@ jobs:
         with:
           name: NapeBar-win-x64
           path: |
-            build/NapeProBatteryTray.exe
+            build/NapeBar.exe
             build/NapeBatteryProbe.exe
             build/README.md

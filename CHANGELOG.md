@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.1.7] - 2026-08-17
+
+Polish the application identity and long-running behavior.
+
+- Rename the tray executable and product metadata to `NapeBar`.
+- Cap `app.log` at 2 MiB and keep one rotated `app.old.log` generation.
+- Compare the Windows startup entry with the current executable path.
+- Migrate the legacy `NapeProBatteryTray` startup entry to `NapeBar`.
+
 ## [0.1.6] - 2026-08-15
 
 Use a compact status bar when the connection label is hidden.

@@ -6,7 +6,7 @@ using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading;
 
-namespace NapeProBatteryTray
+namespace NapeBar
 {
     internal static class NativeMethods
     {
