@@ -1,0 +1,41 @@
+name: NapeBar
+options:
+  bundleIdPrefix: io.github.takizawa122112-boop
+  deploymentTarget:
+    macOS: "14.0"
+  createIntermediateGroups: true
+
+settings:
+  base:
+    # CoreBluetoothのデリゲート型がSwift 6の厳格な並行処理チェックに未対応のため、Swift 5モードでビルドする。
+    # Bluetooth・HIDの処理はすべてメインスレッドで動かしている。
+    SWIFT_VERSION: "5.0"
+    MARKETING_VERSION: "0.2.0"
+    CURRENT_PROJECT_VERSION: "1"
+
+targets:
+  NapeBar:
+    type: application
+    platform: macOS
+    sources:
+      - App
+      - Shared
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: io.github.takizawa122112-boop.NapeBar
+        PRODUCT_NAME: NapeBar
+        CODE_SIGN_IDENTITY: "-"
+        CODE_SIGN_STYLE: Manual
+        CODE_SIGN_ENTITLEMENTS: App/NapeBar.entitlements
+        ENABLE_HARDENED_RUNTIME: NO
+        GENERATE_INFOPLIST_FILE: NO
+    info:
+      path: App/Info.plist
+      properties:
+        CFBundleDisplayName: NapeBar
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        LSUIElement: true
+        LSApplicationCategoryType: public.app-category.utilities
+        NSHumanReadableCopyright: "MIT License. Unofficial community project, not affiliated with Keychron."
+        NSBluetoothAlwaysUsageDescription: "Bluetoothで接続したNape Proのバッテリー残量を読み取るために使います。"

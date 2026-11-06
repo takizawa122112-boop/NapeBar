@@ -5,8 +5,11 @@ on:
   pull_request:
 
 jobs:
-  build:
+  windows:
     runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: windows
 
     steps:
       - name: Check out source
@@ -25,6 +28,28 @@ jobs:
         with:
           name: NapeBar-win-x64
           path: |
-            build/NapeBar.exe
-            build/NapeBatteryProbe.exe
-            build/README.md
+            windows/build/NapeBar.exe
+            windows/build/NapeBatteryProbe.exe
+            windows/build/README.md
+
+  mac:
+    runs-on: macos-15
+    defaults:
+      run:
+        working-directory: mac
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Build
+        run: ./build.sh
+
+      - name: Upload macOS app
+        uses: actions/upload-artifact@v4
+        with:
+          name: NapeBar-mac
+          path: mac/build/NapeBar-mac.zip

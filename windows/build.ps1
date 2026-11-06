@@ -47,6 +47,7 @@ foreach ($legacyOutput in $legacyTrayOutputs) {
     }
 }
 
-Copy-Item -LiteralPath (Join-Path $projectRoot 'README.md') -Destination $outputRoot -Force
+$repoRoot = Split-Path -Parent $projectRoot
+Copy-Item -LiteralPath (Join-Path $repoRoot 'README.md') -Destination $outputRoot -Force
 Copy-Item -LiteralPath $trayOutput -Destination (Join-Path $projectRoot 'NapeBar.exe') -Force
 Write-Host "Built: $outputRoot"

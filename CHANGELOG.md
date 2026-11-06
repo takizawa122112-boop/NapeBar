@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.2.0] - 2026-11-06
+
+Add the macOS version and ship both platforms from one release.
+
+- Add NapeBar for macOS, a menu bar app based on menu-bar-nape-pro-status (MIT).
+- Read the battery level over Bluetooth through the standard Battery Service (`0x180F`) on macOS.
+- Switch automatically between Bluetooth, USB-C, and the 2.4GHz receiver on macOS without restarting the app.
+- Query only the Nape Pro (`0x0440`) and Keychron Link-KM (`0xD026`) on macOS, not other Keychron keyboards.
+- Add a launch-at-login option on macOS.
+- Move the Windows sources to `windows/` and the macOS sources to `mac/`.
+- Build both platforms in CI and publish `NapeBar-v*-mac.zip` and `NapeBar-v*-win-x64.zip` from a single tag.
+
 ## [0.1.7] - 2026-08-17
 
 Polish the application identity and long-running behavior.

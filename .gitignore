@@ -1,14 +1,22 @@
-# Generated build output
-build/*.exe
-build/README.md
+# Generated build output (Windows)
+windows/build/
+windows/NapeBar.exe
+windows/NapeProBatteryTray.exe
 dist/
-/NapeBar.exe
-/NapeProBatteryTray.exe
+
+# Generated build output (macOS)
+mac/build/
+mac/NapeBar.xcodeproj/
+mac/App/Info.plist
 
 # Visual Studio / editor files
 .vs/
 *.user
 *.suo
+
+# Xcode user files
+xcuserdata/
+*.xcuserstate
 
 # OS files
 Thumbs.db
